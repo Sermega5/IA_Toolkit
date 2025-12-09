@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, Sparkles, Download, Eraser, PaintBucket, PenTool, ZoomIn, ZoomOut, Undo, RefreshCcw, Pipette, WifiOff } from 'lucide-react';
-import { editTextureWithAi } from '../services/geminiService';
+import { generateTextureWithMistral } from '../services/geminiService';
 
 const RESOLUTIONS = [16, 32, 64];
 const PALETTE = ['#000000', '#1d2b53', '#7e2553', '#008751', '#ab5236', '#5f574f', '#c2c3c7', '#fff1e8', '#ff004d', '#ffa300', '#ffec27', '#00e436', '#29adff', '#83769c', '#ff77a8', '#ffccaa'];
@@ -218,40 +218,22 @@ const TextureEditor: React.FC = () => {
       }
   }
 
+  // Use Mistral for Generation
   const handleAiRefine = async () => {
       if (!isOnline) return;
-      if (!canvasRef.current || !prompt) return;
+      if (!prompt) return;
+      
+      const confirmGen = window.confirm("Mistral generará una textura NUEVA basada en tu descripción. ¿Continuar?");
+      if (!confirmGen) return;
+
       setIsProcessing(true);
       try {
-          const base64 = canvasRef.current.toDataURL().split(',')[1];
-          const refinedBase64 = await editTextureWithAi(
-              base64, 
-              `Context: ${resolution}x${resolution} item texture. Requirement: ${prompt}`, 
-              'image/png'
-          );
+          const generatedPixels = await generateTextureWithMistral(prompt, resolution);
 
-          if (refinedBase64) {
-              const img = new Image();
-              img.onload = () => {
-                   const ctx = canvasRef.current?.getContext('2d');
-                   if (ctx) {
-                        ctx.clearRect(0,0,resolution, resolution);
-                        ctx.drawImage(img, 0, 0, resolution, resolution);
-                        // Extract pixels back to state
-                        const imageData = ctx.getImageData(0, 0, resolution, resolution);
-                        const newPixels = [];
-                        for (let i = 0; i < imageData.data.length; i += 4) {
-                            const r = imageData.data[i];
-                            const g = imageData.data[i+1];
-                            const b = imageData.data[i+2];
-                            const a = imageData.data[i+3];
-                            if (a < 10) newPixels.push('transparent');
-                            else newPixels.push(`rgb(${r},${g},${b})`);
-                        }
-                        saveToHistory(newPixels);
-                   }
-              };
-              img.src = `data:image/png;base64,${refinedBase64}`;
+          if (generatedPixels) {
+              saveToHistory(generatedPixels);
+          } else {
+              alert('La IA no pudo generar una textura válida.');
           }
       } catch (e) {
           console.error(e);
@@ -386,7 +368,7 @@ const TextureEditor: React.FC = () => {
                         type="text" 
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder={isOnline ? "IA Helper: 'Añade sombras', 'hazlo parecer de oro'..." : "Conecta a internet para usar la IA"}
+                        placeholder={isOnline ? "Mistral: 'Genera una espada de fuego', 'pocion magica'..." : "Conecta a internet para usar la IA"}
                         disabled={!isOnline}
                         className={`w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
                    />
@@ -397,7 +379,7 @@ const TextureEditor: React.FC = () => {
                     className={`bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${!isOnline ? 'grayscale' : ''}`}
                >
                    {isProcessing ? <RefreshCcw className="animate-spin" size={18} /> : <Sparkles size={18} />}
-                   <span>Refinar con IA</span>
+                   <span>Generar (Mistral)</span>
                </button>
           </div>
       </div>

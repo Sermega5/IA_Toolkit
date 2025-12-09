@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Send, Bot, Loader2, ExternalLink, WifiOff } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { chatWithMistral } from '../services/geminiService';
 
 interface WikiAssistantProps {
     isOpen: boolean;
@@ -8,7 +8,7 @@ interface WikiAssistantProps {
 }
 
 const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
-    const [messages, setMessages] = useState<{role: 'user' | 'model', text: string, sources?: any[]}[]>([]);
+    const [messages, setMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -40,7 +40,7 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
         if (!isOnline) {
              setMessages(prev => [...prev, { role: 'user', text: inputValue }]);
              setTimeout(() => {
-                setMessages(prev => [...prev, { role: 'model', text: "Lo siento, necesito conexión a internet para consultar la documentación." }]);
+                setMessages(prev => [...prev, { role: 'model', text: "Lo siento, necesito conexión a internet para usar Mistral AI." }]);
                 setInputValue('');
              }, 500);
              return;
@@ -52,25 +52,15 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
         setIsLoading(true);
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const systemPrompt = "Eres un experto en el plugin ItemsAdder para Minecraft. Tu objetivo es ayudar a los usuarios a configurar items, crear texturas y entender la configuración YAML. Responde siempre en Español y sé conciso y técnico cuando sea necesario.";
             
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: userMsg,
-                config: {
-                    systemInstruction: "Eres un experto en el plugin ItemsAdder para Minecraft. Tu objetivo es ayudar a los usuarios a configurar items, crear texturas y entender la configuración YAML. Basa tus respuestas EXCLUSIVAMENTE en la documentación oficial (wiki) de ItemsAdder (itemsadder.devs.beer). Si usas Google Search, extrae siempre las fuentes. Responde siempre en Español.",
-                    tools: [{ googleSearch: {} }]
-                }
-            });
-
-            const text = response.text || "Lo siento, no pude encontrar información sobre eso.";
-            const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-
-            setMessages(prev => [...prev, { role: 'model', text, sources }]);
+            const responseText = await chatWithMistral(systemPrompt, userMsg);
+            
+            setMessages(prev => [...prev, { role: 'model', text: responseText }]);
 
         } catch (error) {
             console.error(error);
-            setMessages(prev => [...prev, { role: 'model', text: "Hubo un error al conectar con la IA." }]);
+            setMessages(prev => [...prev, { role: 'model', text: "Hubo un error al conectar con Mistral AI." }]);
         } finally {
             setIsLoading(false);
         }
@@ -88,7 +78,7 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
                         </div>
                         <div>
                             <h3 className="font-bold text-white text-lg">Asistente ItemsAdder</h3>
-                            <p className="text-xs text-blue-200">Powered by Gemini 2.5</p>
+                            <p className="text-xs text-blue-200">Powered by Mistral AI</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="text-white/70 hover:text-white transition-colors bg-white/10 hover:bg-white/20 p-2 rounded-full">
@@ -128,25 +118,14 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
                                     ? 'bg-blue-600 text-white rounded-br-none' 
                                     : 'bg-gray-800 text-gray-200 rounded-bl-none border border-gray-700'
                             }`}>
-                                {msg.text}
+                                <div className="whitespace-pre-wrap">{msg.text}</div>
                             </div>
-                            {msg.sources && msg.sources.length > 0 && (
-                                <div className="mt-2 flex flex-wrap gap-2 max-w-[85%]">
-                                    {msg.sources.map((chunk, i) => (
-                                        chunk.web?.uri && (
-                                            <a key={i} href={chunk.web.uri} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[10px] text-blue-300 hover:text-blue-100 bg-blue-900/30 px-2 py-1 rounded border border-blue-800/50 hover:border-blue-500 transition-colors">
-                                                <ExternalLink size={10} /> {chunk.web.title || "Fuente"}
-                                            </a>
-                                        )
-                                    ))}
-                                </div>
-                            )}
                         </div>
                     ))}
                     {isLoading && (
                         <div className="flex items-center gap-3 text-gray-500 text-sm pl-2">
                             <Loader2 size={16} className="animate-spin text-blue-500" /> 
-                            <span className="animate-pulse">Consultando la documentación...</span>
+                            <span className="animate-pulse">Mistral está escribiendo...</span>
                         </div>
                     )}
                     <div ref={messagesEndRef} />

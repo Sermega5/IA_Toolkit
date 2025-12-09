@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Download, Layout, Type, Layers, PenTool, Eraser, PaintBucket, Sparkles, ZoomIn, ZoomOut, Undo, RefreshCcw, WifiOff } from 'lucide-react';
-import { editTextureWithAi } from '../services/geminiService';
+import { generateLayoutWithMistral } from '../services/geminiService';
 
 interface Element {
     id: number;
@@ -201,384 +201,347 @@ const BackgroundDesigner: React.FC = () => {
         if (!ctx) return;
         
         const imageData = ctx.getImageData(0, 0, CANVAS_W, CANVAS_H);
-        const newPixels = [];
+        const newPixels = [...pixels];
+        
         for (let i = 0; i < imageData.data.length; i += 4) {
             const r = imageData.data[i];
             const g = imageData.data[i+1];
             const b = imageData.data[i+2];
-            const hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-            newPixels.push(hex);
+            const a = imageData.data[i+3];
+            
+            // Only update non-transparent baked pixels
+            if (a > 0) {
+                // simple hex conversion
+                const hex = '#' + 
+                    r.toString(16).padStart(2,'0') + 
+                    g.toString(16).padStart(2,'0') + 
+                    b.toString(16).padStart(2,'0');
+                
+                const idx = i / 4;
+                newPixels[idx] = hex;
+            }
         }
         
+        setElements([]);
         saveToHistory(newPixels);
-        setElements([]); // Clear vector elements as they are now baked
-        setSelectedId(null);
     };
 
-    // --- Paint Handlers ---
-
-    const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    const handleCanvasClick = (e: React.MouseEvent) => {
+        // Check for element selection first if tool is select
         if (tool === 'select') {
-            const rect = canvasRef.current!.getBoundingClientRect();
-            const scaleX = canvasRef.current!.width / rect.width;
-            const scaleY = canvasRef.current!.height / rect.height;
-            const x = (e.clientX - rect.left) * scaleX;
-            const y = (e.clientY - rect.top) * scaleY;
-            
-            const hit = [...elements].reverse().find(el => 
-                x >= el.x && x <= el.x + el.w && y >= el.y && y <= el.y + el.h
+            const { x, y } = getPixelIndex(e);
+            const clickedEl = elements.find(el => 
+                x >= el.x && x < el.x + el.w && y >= el.y && y < el.y + el.h
             );
-            setSelectedId(hit ? hit.id : null);
-            return;
+            if (clickedEl) {
+                setSelectedId(clickedEl.id);
+                return;
+            } else {
+                setSelectedId(null);
+            }
         }
 
+        // Painting Logic
+        if (['pencil', 'eraser', 'bucket'].includes(tool)) {
+            const { idx } = getPixelIndex(e);
+            if (idx === -1) return;
+
+            if (tool === 'bucket') {
+                // Simple fill logic (simplified for grid)
+                // For a 176x166 canvas, flood fill is heavy, let's do simple fill for now or limited
+                // Actually let's implement basic flood fill
+                const targetColor = pixels[idx];
+                const replaceColor = selectedColor;
+                if (targetColor !== replaceColor) {
+                   // BFS Fill
+                   const queue = [idx];
+                   const visited = new Set([idx]);
+                   const newPixels = [...pixels];
+                   
+                   while(queue.length) {
+                       const i = queue.pop()!;
+                       newPixels[i] = replaceColor;
+                       
+                       const cx = i % CANVAS_W;
+                       const cy = Math.floor(i / CANVAS_W);
+                       
+                       const neighbors = [
+                           {x: cx+1, y: cy}, {x: cx-1, y: cy},
+                           {x: cx, y: cy+1}, {x: cx, y: cy-1}
+                       ];
+                       
+                       for(const n of neighbors) {
+                           if (n.x >=0 && n.x < CANVAS_W && n.y >=0 && n.y < CANVAS_H) {
+                               const ni = n.y * CANVAS_W + n.x;
+                               if (!visited.has(ni) && pixels[ni] === targetColor) {
+                                   visited.add(ni);
+                                   queue.push(ni);
+                               }
+                           }
+                       }
+                   }
+                   saveToHistory(newPixels);
+                }
+            } else {
+                setIsDrawing(true);
+                paint(e);
+            }
+        } else if (tool === 'picker') {
+             const { idx } = getPixelIndex(e);
+             if (idx !== -1) {
+                 setSelectedColor(pixels[idx]);
+                 setTool('pencil');
+             }
+        }
+    };
+
+    const paint = (e: React.MouseEvent) => {
         const { idx, x, y } = getPixelIndex(e);
         if (idx === -1) return;
-
-        if (tool === 'bucket') {
-            const targetColor = pixels[idx];
-            const newPixels = [...pixels];
-            const queue = [idx];
-            const visited = new Set([idx]);
-            while(queue.length > 0) {
-                const i = queue.pop()!;
-                newPixels[i] = selectedColor;
-                const curX = i % CANVAS_W;
-                const curY = Math.floor(i / CANVAS_W);
-                const neighbors = [
-                    { nx: curX + 1, ny: curY }, { nx: curX - 1, ny: curY }, { nx: curX, ny: curY + 1 }, { nx: curX, ny: curY - 1 }
-                ];
-                for(const n of neighbors) {
-                    if(n.nx >= 0 && n.nx < CANVAS_W && n.ny >=0 && n.ny < CANVAS_H) {
-                        const ni = n.ny * CANVAS_W + n.nx;
-                        if(!visited.has(ni) && newPixels[ni] === targetColor) {
-                            visited.add(ni);
-                            queue.push(ni);
-                        }
-                    }
-                }
-            }
-            saveToHistory(newPixels);
-        } else if (tool === 'picker') {
-             setSelectedColor(pixels[idx]);
-             setTool('pencil');
-        } else {
-            setIsDrawing(true);
-            paint(x, y);
-        }
-    };
-
-    const paint = (x: number, y: number) => {
-        const color = tool === 'eraser' ? '#c6c6c6' : selectedColor;
+        
+        const color = tool === 'eraser' ? 'transparent' : selectedColor;
         const newPixels = [...pixels];
         
-        // Handle Brush Size
-        let modified = false;
-        for (let dy = 0; dy < brushSize; dy++) {
-            for (let dx = 0; dx < brushSize; dx++) {
-                const px = x + dx;
-                const py = y + dy;
-                if (px < CANVAS_W && py < CANVAS_H) {
-                     const i = py * CANVAS_W + px;
-                     if (newPixels[i] !== color) {
-                         newPixels[i] = color;
-                         modified = true;
-                     }
+        // Brush Size Logic
+        const half = Math.floor(brushSize / 2);
+        for(let by = -half; by <= half; by++) {
+            for(let bx = -half; bx <= half; bx++) {
+                const px = x + bx;
+                const py = y + by;
+                if (px >= 0 && px < CANVAS_W && py >= 0 && py < CANVAS_H) {
+                    const pIdx = py * CANVAS_W + px;
+                    newPixels[pIdx] = color;
                 }
             }
         }
         
-        if (modified) {
-            setPixels(newPixels);
-        }
+        setPixels(newPixels);
     };
-
-    const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    
+    const handleMouseMove = (e: React.MouseEvent) => {
         if (!isDrawing) return;
-        const { idx, x, y } = getPixelIndex(e);
-        if (idx !== -1) paint(x, y);
-    };
-
-    const handleCanvasMouseUp = () => {
-        if (isDrawing) {
-            setIsDrawing(false);
-            saveToHistory(pixels);
-        }
+        paint(e);
     };
 
     const handleDownload = () => {
-        if (!canvasRef.current) return;
-        
-        // Create a temporary canvas to scale up the image
-        const tempCanvas = document.createElement('canvas');
-        // Scale 4x for visibility
+        // Create a temp canvas scaled up for download (e.g., 4x)
         const scale = 4;
+        const tempCanvas = document.createElement('canvas');
         tempCanvas.width = CANVAS_W * scale;
         tempCanvas.height = CANVAS_H * scale;
         const ctx = tempCanvas.getContext('2d');
+        if (!ctx) return;
         
-        if (ctx) {
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(canvasRef.current, 0, 0, tempCanvas.width, tempCanvas.height);
-            
-            const link = document.createElement('a');
-            link.download = 'custom_gui_4x.png';
-            link.href = tempCanvas.toDataURL('image/png');
-            link.click();
-        }
+        ctx.imageSmoothingEnabled = false;
+        
+        // Render current view to it
+        ctx.drawImage(canvasRef.current!, 0, 0, tempCanvas.width, tempCanvas.height);
+        
+        const link = document.createElement('a');
+        link.download = `custom_gui_background.png`;
+        link.href = tempCanvas.toDataURL();
+        link.click();
     };
 
-    // --- AI Logic ---
-    const handleAiRefine = async () => {
+    // AI Layout Generation
+    const handleGenerateLayout = async () => {
         if (!isOnline) return;
-        if (!canvasRef.current || !aiPrompt) return;
+        if (!aiPrompt) return;
         
-        // First bake elements so AI sees everything
-        if (elements.length > 0) {
-            const confirmBake = window.confirm("La IA necesita 'hornear' los elementos (slots) en la imagen para editarlos. ¿Continuar?");
-            if(!confirmBake) return;
-            bakeElements();
-            setTimeout(executeAi, 100);
-        } else {
-            executeAi();
-        }
-    };
-
-    const executeAi = async () => {
-        if (!canvasRef.current) return;
         setIsProcessing(true);
         try {
-             const base64 = canvasRef.current.toDataURL().split(',')[1];
-             const refinedBase64 = await editTextureWithAi(
-                  base64,
-                  `Context: Minecraft GUI Background. Requirement: ${aiPrompt}. Ensure slots remain visible if present.`,
-                  'image/png'
-             );
-
-             if (refinedBase64) {
-                 const img = new Image();
-                 img.onload = () => {
-                      const ctx = canvasRef.current?.getContext('2d');
-                      if (ctx) {
-                           ctx.drawImage(img, 0, 0, CANVAS_W, CANVAS_H);
-                           // Extract back to pixels
-                           const imageData = ctx.getImageData(0, 0, CANVAS_W, CANVAS_H);
-                           const newPixels = [];
-                           for (let i = 0; i < imageData.data.length; i += 4) {
-                               const r = imageData.data[i];
-                               const g = imageData.data[i+1];
-                               const b = imageData.data[i+2];
-                               const hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-                               newPixels.push(hex);
-                           }
-                           saveToHistory(newPixels);
-                           // Clear elements since AI replaced them
-                           setElements([]);
-                      }
-                 };
-                 img.src = `data:image/png;base64,${refinedBase64}`;
-             }
+            const layout = await generateLayoutWithMistral(aiPrompt);
+            if (layout && Array.isArray(layout)) {
+                // Map AI layout to elements
+                const newElements = layout.map((item: any, i: number) => ({
+                    id: Date.now() + i,
+                    type: item.type === 'text' ? 'text' : 'slot',
+                    x: item.x || 10,
+                    y: item.y || 10,
+                    w: item.type === 'slot' ? 18 : 50,
+                    h: item.type === 'slot' ? 18 : 10,
+                    text: item.text
+                }));
+                // Clear existing and add new
+                setElements(newElements);
+            } else {
+                alert("Mistral no pudo generar un diseño válido.");
+            }
         } catch (e) {
             console.error(e);
-            alert("Error con la IA.");
+            alert("Error con Mistral AI");
         } finally {
             setIsProcessing(false);
         }
     };
 
     return (
-        <div className="flex h-full bg-gray-950 p-6 overflow-hidden">
-            {/* Toolbar */}
-            <div className="w-64 border-r border-gray-800 pr-4 flex flex-col gap-6 custom-scrollbar overflow-y-auto">
+        <div className="flex h-full bg-gray-950">
+             {/* Left Toolbar */}
+            <div className="w-64 bg-gray-900 border-r border-gray-800 p-4 flex flex-col gap-6">
                 <div>
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
-                        <Layout className="text-pink-500" /> Designer BG
-                    </h2>
+                    <h3 className="text-gray-400 text-xs font-bold uppercase mb-2">Herramientas</h3>
+                    <div className="grid grid-cols-3 gap-2">
+                        {[
+                            { id: 'select', icon: Layout },
+                            { id: 'pencil', icon: PenTool },
+                            { id: 'eraser', icon: Eraser },
+                            { id: 'bucket', icon: PaintBucket },
+                        ].map(t => (
+                            <button 
+                                key={t.id}
+                                onClick={() => setTool(t.id as Tool)}
+                                className={`p-2 rounded ${tool === t.id ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                                title={t.id}
+                            >
+                                <t.icon size={18} />
+                            </button>
+                        ))}
+                    </div>
+                     <div className="mt-4">
+                        <label className="text-xs text-gray-500 font-bold uppercase">Tamaño Pincel: {brushSize}px</label>
+                        <input 
+                            type="range" 
+                            min="1" max="4" 
+                            value={brushSize} 
+                            onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                            className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer mt-1"
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <h3 className="text-gray-400 text-xs font-bold uppercase mb-2">Elementos</h3>
+                    <button onClick={() => addElement('slot')} className="w-full mb-2 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded text-sm flex items-center justify-center gap-2">
+                         <Layers size={14} /> Añadir Slot
+                    </button>
+                    <button onClick={() => addElement('text')} className="w-full mb-2 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded text-sm flex items-center justify-center gap-2">
+                         <Type size={14} /> Añadir Texto
+                    </button>
+                    <button onClick={addGrid} className="w-full mb-4 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded text-sm flex items-center justify-center gap-2">
+                         <Layout size={14} /> Añadir Grid 9x3
+                    </button>
                     
-                    {/* Layer Mode Switch */}
-                    <div className="grid grid-cols-2 gap-2 mb-4">
+                    <button onClick={bakeElements} className="w-full bg-orange-900/30 hover:bg-orange-900/50 text-orange-400 border border-orange-900/50 py-2 rounded text-sm font-bold">
+                        Fusionar Capas (Bake)
+                    </button>
+                    <p className="text-[10px] text-gray-500 mt-1 leading-tight">Fusiona los slots en el fondo para poder pintar encima de ellos.</p>
+                </div>
+
+                {selectedId && tool === 'select' && (
+                    <div className="bg-gray-800 p-3 rounded border border-gray-700">
+                        <h4 className="text-xs font-bold text-white mb-2">Editar Elemento</h4>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                            <div>
+                                <label className="text-[10px] text-gray-500">X</label>
+                                <input type="number" 
+                                    value={elements.find(e => e.id === selectedId)?.x} 
+                                    onChange={(e) => updateSelected('x', parseInt(e.target.value))}
+                                    className="w-full bg-gray-900 border border-gray-600 rounded px-1 text-xs"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-gray-500">Y</label>
+                                <input type="number" 
+                                    value={elements.find(e => e.id === selectedId)?.y} 
+                                    onChange={(e) => updateSelected('y', parseInt(e.target.value))}
+                                    className="w-full bg-gray-900 border border-gray-600 rounded px-1 text-xs"
+                                />
+                            </div>
+                        </div>
+                        {elements.find(e => e.id === selectedId)?.type === 'text' && (
+                            <div>
+                                <label className="text-[10px] text-gray-500">Texto</label>
+                                <input type="text"
+                                    value={elements.find(e => e.id === selectedId)?.text} 
+                                    onChange={(e) => updateSelected('text', e.target.value)}
+                                    className="w-full bg-gray-900 border border-gray-600 rounded px-1 text-xs"
+                                />
+                            </div>
+                        )}
                         <button 
-                            onClick={() => setTool('select')} 
-                            className={`p-2 rounded flex items-center justify-center gap-2 text-xs font-bold ${tool === 'select' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}
+                            onClick={() => {
+                                setElements(elements.filter(e => e.id !== selectedId));
+                                setSelectedId(null);
+                            }}
+                            className="w-full mt-2 bg-red-900/30 text-red-400 hover:bg-red-900/50 py-1 rounded text-xs"
                         >
-                            <Layout size={14} /> Elementos
-                        </button>
-                        <button 
-                            onClick={() => setTool('pencil')} 
-                            className={`p-2 rounded flex items-center justify-center gap-2 text-xs font-bold ${tool !== 'select' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400'}`}
-                        >
-                            <PenTool size={14} /> Pintar
+                            Eliminar
                         </button>
                     </div>
-
-                    {tool === 'select' ? (
-                        <div className="space-y-2 animate-in fade-in slide-in-from-left-4">
-                            <p className="text-[10px] text-gray-500 uppercase font-bold">Modo Vectorial</p>
-                            <button onClick={addGrid} className="w-full bg-gray-800 hover:bg-gray-700 text-white p-2 rounded text-sm flex items-center gap-2">
-                                <Layout size={14} /> Grid 9x3
-                            </button>
-                            <button onClick={() => addElement('slot')} className="w-full bg-gray-800 hover:bg-gray-700 text-white p-2 rounded text-sm flex items-center gap-2">
-                                <div className="w-3 h-3 bg-gray-500 border border-gray-300" /> Slot Único
-                            </button>
-                            <button onClick={() => addElement('text')} className="w-full bg-gray-800 hover:bg-gray-700 text-white p-2 rounded text-sm flex items-center gap-2">
-                                <Type size={14} /> Texto
-                            </button>
-                            
-                            <div className="my-4 border-t border-gray-800 pt-4">
-                                <button onClick={bakeElements} className="w-full bg-yellow-900/40 hover:bg-yellow-900/60 text-yellow-200 p-2 rounded text-xs flex items-center justify-center gap-2 border border-yellow-800">
-                                    <Layers size={14} /> "Hornear" Elementos
-                                </button>
-                                <p className="text-[10px] text-gray-500 mt-1 leading-tight">Convierte los slots en pixeles para poder pintar sobre ellos.</p>
-                            </div>
-
-                            {selectedId && (
-                                <div className="p-3 bg-gray-900 rounded border border-gray-700 space-y-3 mt-4">
-                                    <h3 className="text-xs font-bold text-gray-500 uppercase">Propiedades</h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <label className="text-[10px] text-gray-400">X</label>
-                                            <input type="number" 
-                                                value={elements.find(e => e.id === selectedId)?.x} 
-                                                onChange={(e) => updateSelected('x', Number(e.target.value))}
-                                                className="w-full bg-gray-800 border border-gray-600 rounded text-xs p-1"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] text-gray-400">Y</label>
-                                            <input type="number" 
-                                                value={elements.find(e => e.id === selectedId)?.y} 
-                                                onChange={(e) => updateSelected('y', Number(e.target.value))}
-                                                className="w-full bg-gray-800 border border-gray-600 rounded text-xs p-1"
-                                            />
-                                        </div>
-                                    </div>
-                                    <button onClick={() => {
-                                        setElements(elements.filter(el => el.id !== selectedId));
-                                        setSelectedId(null);
-                                    }} className="w-full bg-red-900/50 hover:bg-red-900 text-red-200 p-1 rounded text-xs">
-                                        Eliminar
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                            <p className="text-[10px] text-gray-500 uppercase font-bold">Modo Pixel Art</p>
-                            
-                            {/* Brush Size */}
-                            <div className="mb-2">
-                                <label className="text-[10px] text-gray-400 block mb-1">Tamaño Pincel</label>
-                                <div className="flex gap-1">
-                                    {[1, 2, 3, 4].map(s => (
-                                        <button 
-                                            key={s}
-                                            onClick={() => setBrushSize(s)}
-                                            className={`flex-1 py-1 rounded text-[10px] border ${brushSize === s ? 'border-purple-500 bg-purple-900/30' : 'border-gray-700 bg-gray-800'}`}
-                                        >
-                                            {s}px
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-4 gap-1">
-                                {[
-                                    {id: 'pencil', icon: PenTool},
-                                    {id: 'eraser', icon: Eraser},
-                                    {id: 'bucket', icon: PaintBucket},
-                                    {id: 'picker', icon: ZoomIn}
-                                ].map(t => (
-                                    <button 
-                                        key={t.id}
-                                        onClick={() => setTool(t.id as Tool)}
-                                        className={`p-2 rounded ${tool === t.id ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400'}`}
-                                    >
-                                        <t.icon size={16} />
-                                    </button>
-                                ))}
-                            </div>
-                            
-                            <div className="grid grid-cols-7 gap-1">
-                                {PALETTE.map(c => (
-                                    <button
-                                        key={c}
-                                        onClick={() => { setSelectedColor(c); setTool('pencil'); }}
-                                        className={`w-6 h-6 rounded-sm border ${selectedColor === c ? 'border-white scale-110' : 'border-transparent'}`}
-                                        style={{ backgroundColor: c }}
-                                    />
-                                ))}
-                            </div>
-                             <input 
-                                type="color" 
-                                value={selectedColor}
-                                onChange={(e) => setSelectedColor(e.target.value)}
-                                className="w-full h-6 bg-transparent cursor-pointer rounded"
+                )}
+                 
+                 <div className="mt-auto">
+                     <h3 className="text-gray-400 text-xs font-bold uppercase mb-2">Paleta</h3>
+                     <div className="grid grid-cols-6 gap-1 mb-2">
+                        {PALETTE.map(c => (
+                            <button
+                                key={c}
+                                onClick={() => { setSelectedColor(c); setTool('pencil'); }}
+                                className={`w-5 h-5 rounded-sm border ${selectedColor === c ? 'border-white scale-110' : 'border-transparent'}`}
+                                style={{ backgroundColor: c }}
                             />
-
-                            <button onClick={handleUndo} className="w-full flex items-center justify-center gap-2 bg-gray-800 text-gray-300 py-1 rounded hover:bg-gray-700 text-xs">
-                                <Undo size={12} /> Deshacer
-                            </button>
-                        </div>
-                    )}
-                </div>
-                
-                {/* AI Section */}
-                <div className="mt-auto bg-gray-900 p-3 rounded-lg border border-purple-900/50">
-                    <h3 className={`text-xs font-bold flex items-center gap-1 mb-2 ${isOnline ? 'text-purple-400' : 'text-gray-500'}`}>
-                        {isOnline ? <Sparkles size={12} /> : <WifiOff size={12}/>}
-                        {isOnline ? "IA Magic" : "IA Desactivada"}
-                    </h3>
-                    <textarea 
-                        value={aiPrompt}
-                        onChange={(e) => setAiPrompt(e.target.value)}
-                        placeholder={isOnline ? "Ej: Haz el fondo de piedra musgosa..." : "Requiere internet..."}
-                        disabled={!isOnline}
-                        className={`w-full bg-gray-800 border border-gray-700 rounded p-2 text-xs h-20 mb-2 resize-none ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    />
-                    <button 
-                        onClick={handleAiRefine}
-                        disabled={isProcessing || !aiPrompt || !isOnline}
-                        className={`w-full bg-purple-600 hover:bg-purple-500 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 ${!isOnline ? 'grayscale' : ''}`}
+                        ))}
+                     </div>
+                     <button 
+                        onClick={handleDownload}
+                        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white py-2 px-3 rounded"
                     >
-                        {isProcessing ? <RefreshCcw className="animate-spin" size={12} /> : "Generar"}
+                        <Download size={16} />
+                        <span className="text-sm">Descargar PNG</span>
                     </button>
-                </div>
+                 </div>
             </div>
 
-            {/* Canvas Area */}
-            <div className="flex-1 flex flex-col items-center justify-center bg-[#1a1a1a] relative"
-                 style={{ backgroundImage: 'radial-gradient(#2a2a2a 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
-                
-                {/* Zoom Controls */}
-                <div className="absolute top-4 right-4 flex gap-2 bg-gray-800 p-1 rounded shadow-lg">
-                    <button onClick={() => setZoom(Math.max(1, zoom - 0.5))} className="p-2 hover:bg-gray-700 rounded text-gray-300"><ZoomOut size={16}/></button>
-                    <span className="p-2 text-xs font-mono text-gray-400 w-12 text-center">{zoom}x</span>
-                    <button onClick={() => setZoom(Math.min(10, zoom + 0.5))} className="p-2 hover:bg-gray-700 rounded text-gray-300"><ZoomIn size={16}/></button>
+            {/* Main Area */}
+            <div className="flex-1 flex flex-col relative overflow-hidden">
+                {/* Zoom Controls Overlay */}
+                <div className="absolute top-4 right-4 flex gap-2 bg-gray-800 p-1 rounded shadow-lg z-20 border border-gray-700">
+                    <button onClick={() => setZoom(z => Math.max(1, z - 1))} className="p-2 hover:bg-gray-700 rounded text-gray-300"><ZoomOut size={16}/></button>
+                    <span className="p-2 text-xs font-mono text-gray-400 w-12 text-center flex items-center justify-center">{zoom}x</span>
+                    <button onClick={() => setZoom(z => Math.min(8, z + 1))} className="p-2 hover:bg-gray-700 rounded text-gray-300"><ZoomIn size={16}/></button>
                 </div>
 
-                <div className="bg-[#121212] p-8 rounded shadow-2xl relative overflow-auto max-w-full max-h-full">
-                    <div className="absolute top-2 left-2 text-gray-500 text-xs font-mono">176x166 (GUI Estándar)</div>
-                    <canvas 
-                        ref={canvasRef}
-                        width={CANVAS_W} 
-                        height={CANVAS_H}
-                        className={`image-pixelated shadow-lg ${tool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
-                        style={{ 
-                            width: CANVAS_W * zoom, 
-                            height: CANVAS_H * zoom 
-                        }}
-                        onMouseDown={handleCanvasMouseDown}
-                        onMouseMove={handleCanvasMouseMove}
-                        onMouseUp={handleCanvasMouseUp}
-                        onMouseLeave={handleCanvasMouseUp}
-                    />
+                <div className="flex-1 overflow-auto bg-[#1a1a1a] flex p-8 relative"
+                     style={{ backgroundImage: 'radial-gradient(#2a2a2a 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
+                    
+                    <div className="m-auto bg-white shadow-2xl border-2 border-gray-600 image-pixelated flex-shrink-0">
+                         <canvas 
+                            ref={canvasRef}
+                            width={CANVAS_W}
+                            height={CANVAS_H}
+                            onMouseDown={handleCanvasClick}
+                            onMouseMove={handleMouseMove}
+                            onMouseUp={() => setIsDrawing(false)}
+                            onMouseLeave={() => setIsDrawing(false)}
+                            className="cursor-crosshair image-pixelated block"
+                            style={{ width: CANVAS_W * zoom, height: CANVAS_H * zoom }}
+                         />
+                    </div>
                 </div>
-                <div className="mt-8">
+
+                 {/* AI Bar */}
+                 <div className="h-20 bg-gray-900 border-t border-gray-800 p-4 flex items-center gap-4 z-20">
+                    <div className="bg-purple-900/20 p-2 rounded-lg">
+                        {isOnline ? <Sparkles className="text-purple-400" /> : <WifiOff className="text-gray-500" />}
+                    </div>
+                    <div className="flex-1">
+                        <input 
+                                type="text" 
+                                value={aiPrompt}
+                                onChange={(e) => setAiPrompt(e.target.value)}
+                                placeholder={isOnline ? "Mistral: 'Crea un inventario de doble cofre', 'menu de misiones'..." : "Conecta a internet para usar la IA"}
+                                disabled={!isOnline}
+                                className={`w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        />
+                    </div>
                     <button 
-                        onClick={handleDownload} 
-                        className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded shadow-lg flex items-center gap-2"
+                            onClick={handleGenerateLayout}
+                            disabled={isProcessing || !aiPrompt || !isOnline}
+                            className={`bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${!isOnline ? 'grayscale' : ''}`}
                     >
-                        <Download size={18} /> Descargar PNG (4x Upscaled)
+                        {isProcessing ? <RefreshCcw className="animate-spin" size={18} /> : <Sparkles size={18} />}
+                        <span>Generar Layout</span>
                     </button>
                 </div>
             </div>

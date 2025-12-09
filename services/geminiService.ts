@@ -1,61 +1,132 @@
-import { GoogleGenAI } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Mistral API Configuration
+const API_KEY = 'r8WigkDi3ggu3ljMhAImAv1r31SPLLOl';
+// Using CORS proxy to allow browser-side requests to Mistral API
+const API_URL = 'https://corsproxy.io/?https://api.mistral.ai/v1/chat/completions';
 
 /**
- * Edits a texture based on a text prompt using Gemini 2.5 Flash Image.
- * @param imageBase64 The base64 string of the image (without the data prefix).
- * @param prompt The user's instruction (e.g., "Make it look like gold").
- * @param mimeType The mime type of the image.
+ * Helper to make requests to Mistral
  */
-export const editTextureWithAi = async (
-  imageBase64: string,
-  prompt: string,
-  mimeType: string = "image/png"
-): Promise<string | null> => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: imageBase64,
-            },
-          },
-          {
-            text: `You are a professional pixel artist assistant for Minecraft.
-TASK: Edit the attached input image according to the User Instruction.
-
-STRICT RULES:
-1. RESPECT THE INPUT: The input image contains a drawing or sketch. You must use it as the base structure. Do not discard it. Do not generate a random image.
-2. EDITING: Apply the requested changes (shading, recoloring, texturing) to the existing pixels. Maintain the silhouette/alpha channel unless asked to change shape.
-3. EMPTY INPUT: Only if the input image is completely blank/transparent, you may generate the object from scratch.
-4. STYLE: The output must be pixel art suitable for Minecraft.
-
-User Instruction: ${prompt}`,
-          },
-        ],
-      },
-      config: {
-        // We rely on the model to return an image in the parts
-      }
+async function callMistral(messages: any[], jsonMode: boolean = false) {
+    const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${API_KEY}`
+        },
+        body: JSON.stringify({
+            model: "mistral-large-latest",
+            messages: messages,
+            response_format: jsonMode ? { type: "json_object" } : undefined
+        })
     });
 
-    // Iterate through parts to find the image
-    if (response.candidates && response.candidates[0].content.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData && part.inlineData.data) {
-          return part.inlineData.data;
-        }
-      }
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Mistral API Error: ${response.status} - ${errorText}`);
     }
 
-    console.warn("No image data found in response");
-    return null;
-  } catch (error) {
-    console.error("Error editing texture with Gemini:", error);
-    throw error;
-  }
+    const data = await response.json();
+    return data.choices[0].message.content;
+}
+
+/**
+ * Sends a chat message to Mistral and returns the response.
+ */
+export const chatWithMistral = async (
+    systemPrompt: string,
+    userMessage: string
+): Promise<string> => {
+    try {
+        const content = await callMistral([
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage }
+        ]);
+        return content || "No response from AI.";
+    } catch (error) {
+        console.error("Mistral Chat Error:", error);
+        return "Error connecting to Mistral AI. Please check the console.";
+    }
+};
+
+/**
+ * Generates a pixel art texture JSON using Mistral (Text-to-Pixel).
+ */
+export const generateTextureWithMistral = async (
+    prompt: string,
+    resolution: number
+): Promise<string[] | null> => {
+    try {
+        const systemPrompt = `You are a pixel art generator. 
+        You must output a VALID JSON object with a single property 'pixels'.
+        'pixels' must be an array of strings representing hex color codes (e.g., '#FF0000') or 'transparent'.
+        The array must have exactly ${resolution * resolution} elements, representing a ${resolution}x${resolution} grid row by row.
+        Do not include markdown formatting like \`\`\`json. Just the raw JSON object.`;
+
+        const userPrompt = `Generate a pixel art texture of: ${prompt}.`;
+
+        const content = await callMistral([
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+        ], true);
+
+        // Parse response
+        let jsonStr = content.trim();
+        // Remove markdown code blocks if present despite instructions
+        if (jsonStr.startsWith('```json')) jsonStr = jsonStr.replace(/^```json/, '').replace(/```$/, '');
+        if (jsonStr.startsWith('```')) jsonStr = jsonStr.replace(/^```/, '').replace(/```$/, '');
+
+        const json = JSON.parse(jsonStr);
+
+        if (json.pixels && Array.isArray(json.pixels)) {
+            // Ensure size match
+            if (json.pixels.length !== resolution * resolution) {
+                // Pad or trim if necessary (fallback)
+                const safe = json.pixels.slice(0, resolution * resolution);
+                while (safe.length < resolution * resolution) safe.push('transparent');
+                return safe;
+            }
+            return json.pixels;
+        }
+        return null;
+    } catch (error) {
+        console.error("Mistral Texture Error:", error);
+        return null;
+    }
+};
+
+/**
+ * Generates layout commands for the Background Designer.
+ */
+export const generateLayoutWithMistral = async (
+    prompt: string
+): Promise<any[] | null> => {
+    try {
+        const systemPrompt = `You are a Minecraft GUI Layout generator. 
+        Output a VALID JSON object with a property 'elements'.
+        'elements' is an array of objects. Each object has:
+        - type: "slot" or "text"
+        - x: number (canvas width is 176)
+        - y: number (canvas height is 166)
+        - text: string (optional, only for type "text")
+        Standard slot size is 18x18.
+        Do not include markdown formatting.`;
+
+        const userPrompt = `Generate a layout for: "${prompt}".`;
+
+        const content = await callMistral([
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+        ], true);
+
+         // Parse response
+         let jsonStr = content.trim();
+         if (jsonStr.startsWith('```json')) jsonStr = jsonStr.replace(/^```json/, '').replace(/```$/, '');
+         if (jsonStr.startsWith('```')) jsonStr = jsonStr.replace(/^```/, '').replace(/```$/, '');
+ 
+        const json = JSON.parse(jsonStr);
+        return json.elements || null;
+    } catch (error) {
+        console.error("Mistral Layout Error:", error);
+        return null;
+    }
 };
