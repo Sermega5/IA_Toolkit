@@ -110,6 +110,14 @@ ${specificYaml}`;
   const removeSpecific = (index: number) => {
       setConfig({ ...config, specifics: config.specifics.filter((_, i) => i !== index) });
   };
+  
+  // Clean material name for API
+  const getMaterialPreview = () => {
+      // If it contains a namespace, remove it for standard blocks if needed, 
+      // but ItemsAdder usually uses vanilla materials for the 'material' field.
+      // Mineatar works best with standard IDs or numerical IDs, but string IDs (diamond_sword) are fine.
+      return `https://api.mineatar.io/item/${config.material.toLowerCase().replace('minecraft:', '')}`;
+  };
 
   return (
     <div className="flex h-full bg-gray-950 text-gray-200">
@@ -180,17 +188,28 @@ ${specificYaml}`;
                         <div className="p-4 bg-gray-900/50 space-y-4">
                              <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                <label className="block text-xs uppercase text-gray-500 font-bold mb-1">Material Base</label>
-                                <select 
-                                    value={config.material}
-                                    onChange={e => setConfig({...config, material: e.target.value})}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded p-2 focus:border-green-500 outline-none"
-                                >
-                                    <option value="DIAMOND_SWORD">DIAMOND_SWORD</option>
-                                    <option value="PAPER">PAPER</option>
-                                    <option value="LEATHER_HELMET">LEATHER_HELMET</option>
-                                    <option value="BOW">BOW</option>
-                                </select>
+                                    <label className="block text-xs uppercase text-gray-500 font-bold mb-1">Material Base</label>
+                                    <div className="flex gap-2">
+                                        <div className="w-10 h-10 bg-gray-800 border border-gray-700 rounded flex items-center justify-center flex-shrink-0">
+                                            <img src={getMaterialPreview()} alt="" className="w-8 h-8 object-contain image-pixelated" onError={(e) => e.currentTarget.style.display = 'none'}/>
+                                        </div>
+                                        <input 
+                                            list="materials"
+                                            value={config.material}
+                                            onChange={e => setConfig({...config, material: e.target.value})}
+                                            className="w-full bg-gray-800 border border-gray-700 rounded p-2 focus:border-green-500 outline-none uppercase"
+                                            placeholder="Ej: DIAMOND_SWORD"
+                                        />
+                                        <datalist id="materials">
+                                            <option value="DIAMOND_SWORD" />
+                                            <option value="PAPER" />
+                                            <option value="LEATHER_HELMET" />
+                                            <option value="BOW" />
+                                            <option value="STICK" />
+                                            <option value="STONE" />
+                                            <option value="GRASS_BLOCK" />
+                                        </datalist>
+                                    </div>
                                 </div>
                                 <div>
                                 <label className="block text-xs uppercase text-gray-500 font-bold mb-1">Custom Model ID</label>

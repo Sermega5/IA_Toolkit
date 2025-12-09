@@ -25,7 +25,16 @@ export const editTextureWithAi = async (
             },
           },
           {
-            text: `Edit this Minecraft texture based on the following instruction. Maintain the pixel-art style if applicable. Return ONLY the image. Instruction: ${prompt}`,
+            text: `You are a professional pixel artist assistant for Minecraft.
+TASK: Edit the attached input image according to the User Instruction.
+
+STRICT RULES:
+1. RESPECT THE INPUT: The input image contains a drawing or sketch. You must use it as the base structure. Do not discard it. Do not generate a random image.
+2. EDITING: Apply the requested changes (shading, recoloring, texturing) to the existing pixels. Maintain the silhouette/alpha channel unless asked to change shape.
+3. EMPTY INPUT: Only if the input image is completely blank/transparent, you may generate the object from scratch.
+4. STYLE: The output must be pixel art suitable for Minecraft.
+
+User Instruction: ${prompt}`,
           },
         ],
       },

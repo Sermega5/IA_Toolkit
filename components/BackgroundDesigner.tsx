@@ -339,7 +339,7 @@ const BackgroundDesigner: React.FC = () => {
              const base64 = canvasRef.current.toDataURL().split(',')[1];
              const refinedBase64 = await editTextureWithAi(
                   base64,
-                  `${aiPrompt} . Keep the exact GUI dimensions and slot positions, but upgrade the artistic style to be high quality minecraft GUI pixel art.`,
+                  `Context: Minecraft GUI Background. Requirement: ${aiPrompt}. Ensure slots remain visible if present.`,
                   'image/png'
              );
 

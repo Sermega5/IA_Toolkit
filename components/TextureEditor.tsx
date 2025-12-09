@@ -214,7 +214,7 @@ const TextureEditor: React.FC = () => {
           const base64 = canvasRef.current.toDataURL().split(',')[1];
           const refinedBase64 = await editTextureWithAi(
               base64, 
-              `${prompt} . Maintain the exact shape and transparency, but shade it and make it look like a professional Minecraft item texture with ${resolution}x${resolution} resolution.`, 
+              `Context: ${resolution}x${resolution} item texture. Requirement: ${prompt}`, 
               'image/png'
           );
 
