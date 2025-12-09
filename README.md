@@ -1,57 +1,20 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8" />
-
-
-
-
-</head>
-<body>
-<div class="container">
-
-
-
-
-
-
-<h1>IA Toolkit</h1>
-<p><strong>Hecho por Sermega · Derechos reservados a Sermega</strong></p>
-
-
-<h2>🚀 Ejecutar en local</h2>
-<p>Este proyecto contiene todo lo necesario para ejecutar la aplicación localmente y comenzar a trabajar con tu propio entorno de inteligencia artificial.</p>
-
-
-<h3>Requisitos previos:</h3>
-<ul>
-<li>Node.js instalado en tu sistema</li>
-</ul>
-
-
-<h3>Pasos:</h3>
-<ol>
-<li>
-Instala las dependencias:
-<pre><code>npm install</code></pre>
-</li>
-<li>
-Configura tu proveedor de IA en <strong>.env.local</strong>:
-<pre><code>AI_API_URL=http://localhost:11434/api/chat
-AI_MODEL=mistral</code></pre>
-</li>
-<li>
-Ejecuta la aplicación:
-<pre><code>npm run dev</code></pre>
-</li>
-</ol>
-
-
-<div class="footer">
-<p><strong>Hecho por Sermega · Derechos reservados a Sermega.</strong></p>
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
+# Run and deploy your AI Studio app
 
-</div>
-</body>
-</html>
+This contains everything you need to run your app locally.
+
+View your app in AI Studio: https://ai.studio/apps/drive/1pgYs_4_GDwc9-P0hRXN3GDB-KMepsjam
+
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`
