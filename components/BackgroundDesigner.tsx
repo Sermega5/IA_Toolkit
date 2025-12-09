@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Download, Layout, Type, Layers, PenTool, Eraser, PaintBucket, Sparkles, ZoomIn, ZoomOut, Undo, RefreshCcw, Circle } from 'lucide-react';
+import { Download, Layout, Type, Layers, PenTool, Eraser, PaintBucket, Sparkles, ZoomIn, ZoomOut, Undo, RefreshCcw, WifiOff } from 'lucide-react';
 import { editTextureWithAi } from '../services/geminiService';
 
 interface Element {
@@ -44,8 +44,19 @@ const BackgroundDesigner: React.FC = () => {
     // AI
     const [aiPrompt, setAiPrompt] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        const handleStatus = () => setIsOnline(navigator.onLine);
+        window.addEventListener('online', handleStatus);
+        window.addEventListener('offline', handleStatus);
+        return () => {
+            window.removeEventListener('online', handleStatus);
+            window.removeEventListener('offline', handleStatus);
+        };
+    }, []);
 
     // Initialization: Draw default background grey on pixel layer once
     useEffect(() => {
@@ -319,6 +330,7 @@ const BackgroundDesigner: React.FC = () => {
 
     // --- AI Logic ---
     const handleAiRefine = async () => {
+        if (!isOnline) return;
         if (!canvasRef.current || !aiPrompt) return;
         
         // First bake elements so AI sees everything
@@ -512,19 +524,21 @@ const BackgroundDesigner: React.FC = () => {
                 
                 {/* AI Section */}
                 <div className="mt-auto bg-gray-900 p-3 rounded-lg border border-purple-900/50">
-                    <h3 className="text-xs font-bold text-purple-400 flex items-center gap-1 mb-2">
-                        <Sparkles size={12} /> IA Magic
+                    <h3 className={`text-xs font-bold flex items-center gap-1 mb-2 ${isOnline ? 'text-purple-400' : 'text-gray-500'}`}>
+                        {isOnline ? <Sparkles size={12} /> : <WifiOff size={12}/>}
+                        {isOnline ? "IA Magic" : "IA Desactivada"}
                     </h3>
                     <textarea 
                         value={aiPrompt}
                         onChange={(e) => setAiPrompt(e.target.value)}
-                        placeholder="Ej: Haz el fondo de piedra musgosa con enredaderas..."
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-xs h-20 mb-2 resize-none"
+                        placeholder={isOnline ? "Ej: Haz el fondo de piedra musgosa..." : "Requiere internet..."}
+                        disabled={!isOnline}
+                        className={`w-full bg-gray-800 border border-gray-700 rounded p-2 text-xs h-20 mb-2 resize-none ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
                     />
                     <button 
                         onClick={handleAiRefine}
-                        disabled={isProcessing || !aiPrompt}
-                        className="w-full bg-purple-600 hover:bg-purple-500 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                        disabled={isProcessing || !aiPrompt || !isOnline}
+                        className={`w-full bg-purple-600 hover:bg-purple-500 text-white py-1.5 rounded text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50 ${!isOnline ? 'grayscale' : ''}`}
                     >
                         {isProcessing ? <RefreshCcw className="animate-spin" size={12} /> : "Generar"}
                     </button>

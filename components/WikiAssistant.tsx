@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, Bot, Loader2, ExternalLink } from 'lucide-react';
+import { X, Send, Bot, Loader2, ExternalLink, WifiOff } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 
 interface WikiAssistantProps {
@@ -12,6 +12,17 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+    useEffect(() => {
+        const handleStatus = () => setIsOnline(navigator.onLine);
+        window.addEventListener('online', handleStatus);
+        window.addEventListener('offline', handleStatus);
+        return () => {
+            window.removeEventListener('online', handleStatus);
+            window.removeEventListener('offline', handleStatus);
+        };
+    }, []);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -26,6 +37,15 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
     const handleSend = async () => {
         if (!inputValue.trim()) return;
         
+        if (!isOnline) {
+             setMessages(prev => [...prev, { role: 'user', text: inputValue }]);
+             setTimeout(() => {
+                setMessages(prev => [...prev, { role: 'model', text: "Lo siento, necesito conexión a internet para consultar la documentación." }]);
+                setInputValue('');
+             }, 500);
+             return;
+        }
+
         const userMsg = inputValue;
         setInputValue('');
         setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
@@ -79,16 +99,26 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
                 <div className="flex-1 p-6 overflow-y-auto bg-gray-950 space-y-6 custom-scrollbar">
                     {messages.length === 0 && (
                         <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-60">
-                            <Bot size={64} className="mb-4 text-gray-700" />
-                            <p className="mb-2 text-lg">¿En qué puedo ayudarte hoy?</p>
-                            <div className="flex gap-2 mt-4">
-                                <button onClick={() => setInputValue("¿Cómo creo una armadura custom?")} className="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-full border border-gray-700 transition-colors">
-                                    Crear armadura custom
-                                </button>
-                                <button onClick={() => setInputValue("Dame la config de una espada de obsidiana")} className="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-full border border-gray-700 transition-colors">
-                                    Ejemplo espada YAML
-                                </button>
-                            </div>
+                            {isOnline ? (
+                                <>
+                                    <Bot size={64} className="mb-4 text-gray-700" />
+                                    <p className="mb-2 text-lg">¿En qué puedo ayudarte hoy?</p>
+                                    <div className="flex gap-2 mt-4">
+                                        <button onClick={() => setInputValue("¿Cómo creo una armadura custom?")} className="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-full border border-gray-700 transition-colors">
+                                            Crear armadura custom
+                                        </button>
+                                        <button onClick={() => setInputValue("Dame la config de una espada de obsidiana")} className="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-full border border-gray-700 transition-colors">
+                                            Ejemplo espada YAML
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <WifiOff size={64} className="mb-4 text-gray-700" />
+                                    <p className="mb-2 text-lg">Modo Offline Activo</p>
+                                    <p className="text-xs">Conecta a internet para usar el asistente.</p>
+                                </>
+                            )}
                         </div>
                     )}
                     {messages.map((msg, idx) => (
@@ -129,13 +159,14 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder="Pregunta sobre configs, texturas o errores..."
-                            className="w-full bg-gray-800 text-white rounded-xl py-4 pl-5 pr-12 text-sm focus:ring-2 focus:ring-blue-600 outline-none border border-gray-700 shadow-inner"
+                            placeholder={isOnline ? "Pregunta sobre configs, texturas o errores..." : "Sin conexión..."}
+                            disabled={!isOnline}
+                            className={`w-full bg-gray-800 text-white rounded-xl py-4 pl-5 pr-12 text-sm focus:ring-2 focus:ring-blue-600 outline-none border border-gray-700 shadow-inner ${!isOnline ? 'cursor-not-allowed opacity-50' : ''}`}
                             autoFocus
                         />
                         <button 
                             onClick={handleSend}
-                            disabled={isLoading || !inputValue.trim()}
+                            disabled={isLoading || !inputValue.trim() || !isOnline}
                             className="absolute right-2 top-2 p-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                         >
                             <Send size={18} />

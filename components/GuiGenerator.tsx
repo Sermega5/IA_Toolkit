@@ -49,84 +49,79 @@ guis:
 
     const getTextureUrl = (itemName: string) => {
         if (!itemName) return null;
-        // Strip namespace if present
         const cleanName = itemName.includes(':') ? itemName.split(':')[1] : itemName;
-        // Normalize for texture packs (lowercase, etc)
         return cleanName.toLowerCase().replace(/ /g, '_');
     };
 
     return (
         <div className="flex h-full bg-gray-950 p-6 overflow-hidden">
             <div className="flex flex-col w-2/3 pr-6">
-                <div className="mb-6 flex justify-between items-end">
-                    <div>
-                        <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
-                             <Grid className="text-orange-500" /> Diseñador de GUI (Config)
-                        </h2>
-                        <p className="text-gray-400 text-sm">Configura la lógica del menú y previsualiza items.</p>
-                    </div>
+                <div className="mb-6">
+                    <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+                        <Grid className="text-orange-500" /> Diseñador de GUI (Config)
+                    </h2>
+                    <p className="text-gray-400 text-sm">Configura la lógica del menú y los items.</p>
                 </div>
 
-                <div className="bg-[#c6c6c6] p-4 rounded-lg shadow-xl border-4 border-[#555555] inline-block self-center relative">
-                    <div className="text-[#404040] font-bold mb-2 font-pixel px-2 text-lg drop-shadow-sm">{title.replace(/&[0-9a-f]/g, '')}</div>
-                    <div className="grid grid-cols-9 gap-1 bg-[#c6c6c6]">
-                        {Array.from({ length: 54 }).map((_, i) => {
-                            const slotData = getSlotData(i);
-                            const isSelected = selectedSlot === i;
-                            const textureName = slotData?.item ? getTextureUrl(slotData.item) : null;
-                            
-                            // URLs to try in order (handled by error fallback)
-                            // 1. Item texture
-                            const itemUrl = textureName ? `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.19.3/assets/minecraft/textures/item/${textureName}.png` : '';
-                            // 2. Block texture (if item fails)
-                            const blockUrl = textureName ? `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.19.3/assets/minecraft/textures/block/${textureName}.png` : '';
-
-                            return (
-                                <div 
-                                    key={i}
-                                    onClick={() => setSelectedSlot(i)}
-                                    className={`
-                                        w-10 h-10 border-2 
-                                        ${isSelected ? 'border-red-500 z-10' : 'border-[#373737] border-r-white border-b-white'} 
-                                        bg-[#8b8b8b] hover:bg-[#9b9b9b] cursor-pointer relative
-                                        flex items-center justify-center group transition-colors
-                                    `}
-                                >
-                                    {/* Slot Inner Shadow */}
-                                    <div className="absolute inset-0 border-t-[#373737] border-l-[#373737] border-2 pointer-events-none opacity-40"></div>
-                                    
-                                    {slotData?.item && (
-                                        <div className="w-8 h-8 z-0 relative flex items-center justify-center">
-                                            <img 
-                                                src={itemUrl} 
-                                                alt=""
-                                                className="w-full h-full object-contain image-pixelated"
-                                                onError={(e) => {
-                                                    const img = e.currentTarget;
-                                                    // Try fallback to block texture
-                                                    if (blockUrl && img.src !== blockUrl) {
-                                                        img.src = blockUrl;
-                                                    } else {
-                                                        // Fallback failed, hide image and show text placeholder
-                                                        img.style.display = 'none';
-                                                        img.parentElement!.classList.add('text-placeholder');
-                                                    }
-                                                }}
-                                            />
-                                            {/* Text placeholder shown via CSS if image is hidden */}
-                                            <div className="hidden text-placeholder absolute inset-0 items-center justify-center text-[8px] font-bold text-gray-700/50">
-                                                ?
+                <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col items-center">
+                    {/* Standard Grid Layout */}
+                    <div className="bg-[#1e1e1e] p-4 rounded-lg shadow-xl border border-gray-800">
+                         <div className="grid grid-cols-9 gap-1 bg-[#c6c6c6] p-1 border-4 border-[#555555] rounded-sm">
+                            {Array.from({ length: 54 }).map((_, i) => {
+                                const slotData = getSlotData(i);
+                                const isSelected = selectedSlot === i;
+                                const textureName = slotData?.item ? getTextureUrl(slotData.item) : null;
+                                
+                                // Preview Logic
+                                const mineatarUrl = textureName ? `https://api.mineatar.io/item/${textureName}` : '';
+                                const rawItemUrl = textureName ? `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.19.3/assets/minecraft/textures/item/${textureName}.png` : '';
+                                
+                                return (
+                                    <div 
+                                        key={i}
+                                        onClick={() => setSelectedSlot(i)}
+                                        className={`
+                                            w-10 h-10 sm:w-12 sm:h-12 border-2 
+                                            ${isSelected ? 'border-red-500 z-10' : 'border-[#373737] hover:border-white'} 
+                                            bg-[#8b8b8b] cursor-pointer relative
+                                            flex items-center justify-center group
+                                            transition-all
+                                        `}
+                                    >
+                                        <div className="absolute inset-0 border-t-2 border-l-2 border-[#373737] opacity-20 pointer-events-none"></div>
+                                        <div className="absolute inset-0 border-b-2 border-r-2 border-[#ffffff] opacity-20 pointer-events-none"></div>
+                                        
+                                        <span className="absolute top-0.5 left-0.5 text-[8px] text-gray-600 font-mono opacity-0 group-hover:opacity-100">{i}</span>
+                                        
+                                        {slotData?.item && (
+                                            <div className="w-8 h-8 z-10 relative flex items-center justify-center">
+                                                <img 
+                                                    src={mineatarUrl} 
+                                                    alt=""
+                                                    className="w-full h-full object-contain image-pixelated"
+                                                    onError={(e) => {
+                                                        const img = e.currentTarget;
+                                                        if (rawItemUrl && img.src !== rawItemUrl) {
+                                                            img.src = rawItemUrl;
+                                                        } else {
+                                                            img.style.display = 'none';
+                                                            img.parentElement!.classList.add('text-placeholder');
+                                                        }
+                                                    }}
+                                                />
+                                                 <div className="hidden text-placeholder absolute inset-0 items-center justify-center text-[8px] font-bold text-gray-700 break-all text-center leading-none overflow-hidden">
+                                                    {textureName?.substring(0, 4)}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
-                                    <span className="text-[8px] text-gray-600 absolute top-0.5 left-0.5 font-mono opacity-0 group-hover:opacity-100 bg-white/50 px-0.5 rounded pointer-events-none">{i}</span>
-                                </div>
-                            );
-                        })}
+                                        )}
+                                    </div>
+                                );
+                            })}
+                         </div>
                     </div>
                 </div>
                 
-                <div className="mt-8 bg-gray-900 p-4 rounded border border-gray-800 font-mono text-xs text-green-400 overflow-auto flex-1 custom-scrollbar whitespace-pre shadow-inner">
+                <div className="mt-8 bg-gray-900 p-4 rounded border border-gray-800 font-mono text-xs text-green-400 overflow-auto h-48 custom-scrollbar whitespace-pre shadow-inner">
                     {generateYaml()}
                 </div>
             </div>
@@ -155,10 +150,7 @@ guis:
                  </div>
 
                  <h3 className="font-bold text-gray-300 border-b border-gray-700 pb-2 mb-4 flex justify-between items-center">
-                     <span>Slot: <span className="text-blue-400 font-mono">{selectedSlot !== null ? selectedSlot : '-'}</span></span>
-                     {selectedSlot !== null && getSlotData(selectedSlot) && (
-                         <span className="text-[10px] bg-green-900 text-green-300 px-2 py-0.5 rounded">Configurado</span>
-                     )}
+                     <span>Slot Seleccionado: <span className="text-blue-400 font-mono">{selectedSlot !== null ? selectedSlot : '-'}</span></span>
                  </h3>
 
                  {selectedSlot !== null ? (
@@ -171,7 +163,7 @@ guis:
                                 onChange={(e) => updateSlot(selectedSlot, { item: e.target.value })}
                                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm font-mono focus:border-blue-500 outline-none"
                             />
-                            <p className="text-[10px] text-gray-500 mt-1">Usa nombres estándar (minecraft:stone) para ver la preview.</p>
+                            <p className="text-[10px] text-gray-500 mt-1">Usa nombres en inglés (ej: diamond_sword) para ver la imagen.</p>
                          </div>
                          <div>
                             <label className="block text-xs uppercase text-gray-500 font-bold mb-1">Comando / Acción</label>

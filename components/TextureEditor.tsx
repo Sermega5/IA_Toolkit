@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, Sparkles, Download, Eraser, PaintBucket, PenTool, ZoomIn, ZoomOut, Undo, RefreshCcw, Pipette } from 'lucide-react';
+import { Upload, Sparkles, Download, Eraser, PaintBucket, PenTool, ZoomIn, ZoomOut, Undo, RefreshCcw, Pipette, WifiOff } from 'lucide-react';
 import { editTextureWithAi } from '../services/geminiService';
 
 const RESOLUTIONS = [16, 32, 64];
@@ -18,11 +18,22 @@ const TextureEditor: React.FC = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   // Zoom state
   const [zoom, setZoom] = useState(32);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const handleStatus = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', handleStatus);
+    window.addEventListener('offline', handleStatus);
+    return () => {
+        window.removeEventListener('online', handleStatus);
+        window.removeEventListener('offline', handleStatus);
+    };
+  }, []);
 
   // Initialize pixels when resolution changes
   useEffect(() => {
@@ -208,6 +219,7 @@ const TextureEditor: React.FC = () => {
   }
 
   const handleAiRefine = async () => {
+      if (!isOnline) return;
       if (!canvasRef.current || !prompt) return;
       setIsProcessing(true);
       try {
@@ -367,21 +379,22 @@ const TextureEditor: React.FC = () => {
           {/* AI Bar */}
           <div className="h-20 bg-gray-900 border-t border-gray-800 p-4 flex items-center gap-4 z-20">
                <div className="bg-purple-900/20 p-2 rounded-lg">
-                   <Sparkles className="text-purple-400" />
+                   {isOnline ? <Sparkles className="text-purple-400" /> : <WifiOff className="text-gray-500" />}
                </div>
                <div className="flex-1">
                    <input 
                         type="text" 
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="IA Helper: 'Añade sombras', 'hazlo parecer de oro', 'añade un borde mágico'..." 
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                        placeholder={isOnline ? "IA Helper: 'Añade sombras', 'hazlo parecer de oro'..." : "Conecta a internet para usar la IA"}
+                        disabled={!isOnline}
+                        className={`w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
                    />
                </div>
                <button 
                     onClick={handleAiRefine}
-                    disabled={isProcessing || !prompt}
-                    className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isProcessing || !prompt || !isOnline}
+                    className={`bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${!isOnline ? 'grayscale' : ''}`}
                >
                    {isProcessing ? <RefreshCcw className="animate-spin" size={18} /> : <Sparkles size={18} />}
                    <span>Refinar con IA</span>
