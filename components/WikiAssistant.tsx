@@ -1,0 +1,150 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Send, Bot, Loader2, ExternalLink } from 'lucide-react';
+import { GoogleGenAI } from "@google/genai";
+
+interface WikiAssistantProps {
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
+    const [messages, setMessages] = useState<{role: 'user' | 'model', text: string, sources?: any[]}[]>([]);
+    const [inputValue, setInputValue] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        if (isOpen) {
+            scrollToBottom();
+        }
+    }, [messages, isOpen]);
+
+    const handleSend = async () => {
+        if (!inputValue.trim()) return;
+        
+        const userMsg = inputValue;
+        setInputValue('');
+        setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+        setIsLoading(true);
+
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: userMsg,
+                config: {
+                    systemInstruction: "Eres un experto en el plugin ItemsAdder para Minecraft. Tu objetivo es ayudar a los usuarios a configurar items, crear texturas y entender la configuración YAML. Basa tus respuestas EXCLUSIVAMENTE en la documentación oficial (wiki) de ItemsAdder (itemsadder.devs.beer). Si usas Google Search, extrae siempre las fuentes. Responde siempre en Español.",
+                    tools: [{ googleSearch: {} }]
+                }
+            });
+
+            const text = response.text || "Lo siento, no pude encontrar información sobre eso.";
+            const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+
+            setMessages(prev => [...prev, { role: 'model', text, sources }]);
+
+        } catch (error) {
+            console.error(error);
+            setMessages(prev => [...prev, { role: 'model', text: "Hubo un error al conectar con la IA." }]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="absolute top-0 left-0 w-full h-full bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-8 pointer-events-auto">
+            <div className="w-full max-w-2xl h-[80vh] bg-gray-900 border border-gray-700 rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                <div className="bg-gradient-to-r from-blue-700 to-purple-800 p-4 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-white/10 p-2 rounded-full">
+                            <Bot size={24} className="text-white" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-white text-lg">Asistente ItemsAdder</h3>
+                            <p className="text-xs text-blue-200">Powered by Gemini 2.5</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-white/70 hover:text-white transition-colors bg-white/10 hover:bg-white/20 p-2 rounded-full">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="flex-1 p-6 overflow-y-auto bg-gray-950 space-y-6 custom-scrollbar">
+                    {messages.length === 0 && (
+                        <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-60">
+                            <Bot size={64} className="mb-4 text-gray-700" />
+                            <p className="mb-2 text-lg">¿En qué puedo ayudarte hoy?</p>
+                            <div className="flex gap-2 mt-4">
+                                <button onClick={() => setInputValue("¿Cómo creo una armadura custom?")} className="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-full border border-gray-700 transition-colors">
+                                    Crear armadura custom
+                                </button>
+                                <button onClick={() => setInputValue("Dame la config de una espada de obsidiana")} className="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-2 rounded-full border border-gray-700 transition-colors">
+                                    Ejemplo espada YAML
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    {messages.map((msg, idx) => (
+                        <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                            <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${
+                                msg.role === 'user' 
+                                    ? 'bg-blue-600 text-white rounded-br-none' 
+                                    : 'bg-gray-800 text-gray-200 rounded-bl-none border border-gray-700'
+                            }`}>
+                                {msg.text}
+                            </div>
+                            {msg.sources && msg.sources.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-2 max-w-[85%]">
+                                    {msg.sources.map((chunk, i) => (
+                                        chunk.web?.uri && (
+                                            <a key={i} href={chunk.web.uri} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[10px] text-blue-300 hover:text-blue-100 bg-blue-900/30 px-2 py-1 rounded border border-blue-800/50 hover:border-blue-500 transition-colors">
+                                                <ExternalLink size={10} /> {chunk.web.title || "Fuente"}
+                                            </a>
+                                        )
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                    {isLoading && (
+                        <div className="flex items-center gap-3 text-gray-500 text-sm pl-2">
+                            <Loader2 size={16} className="animate-spin text-blue-500" /> 
+                            <span className="animate-pulse">Consultando la documentación...</span>
+                        </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                </div>
+
+                <div className="p-4 bg-gray-900 border-t border-gray-800">
+                    <div className="relative max-w-4xl mx-auto">
+                        <input 
+                            type="text" 
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                            placeholder="Pregunta sobre configs, texturas o errores..."
+                            className="w-full bg-gray-800 text-white rounded-xl py-4 pl-5 pr-12 text-sm focus:ring-2 focus:ring-blue-600 outline-none border border-gray-700 shadow-inner"
+                            autoFocus
+                        />
+                        <button 
+                            onClick={handleSend}
+                            disabled={isLoading || !inputValue.trim()}
+                            className="absolute right-2 top-2 p-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                        >
+                            <Send size={18} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default WikiAssistant;

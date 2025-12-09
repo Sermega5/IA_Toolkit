@@ -1,0 +1,5 @@
+{
+  "name": "ItemsAdder Swiss Army Knife",
+  "description": "A comprehensive toolkit for Minecraft ItemsAdder developers. Features a Rank Bitmap Generator, AI-powered Texture Editor using Gemini 2.5 Flash, and Item Configuration Generator.",
+  "requestFramePermissions": []
+}
