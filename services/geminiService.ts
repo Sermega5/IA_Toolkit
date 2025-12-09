@@ -1,82 +1,59 @@
-// Mistral API Configuration
-const API_KEY = 'r8WigkDi3ggu3ljMhAImAv1r31SPLLOl';
-// Using CORS proxy to allow browser-side requests to Mistral API
-const API_URL = 'https://corsproxy.io/?https://api.mistral.ai/v1/chat/completions';
+import { GoogleGenAI, Type } from "@google/genai";
+
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
- * Helper to make requests to Mistral
+ * Sends a chat message to Gemini and returns the response.
  */
-async function callMistral(messages: any[], jsonMode: boolean = false) {
-    const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${API_KEY}`
-        },
-        body: JSON.stringify({
-            model: "mistral-large-latest",
-            messages: messages,
-            response_format: jsonMode ? { type: "json_object" } : undefined
-        })
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Mistral API Error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
-}
-
-/**
- * Sends a chat message to Mistral and returns the response.
- */
-export const chatWithMistral = async (
+export const chatWithGemini = async (
     systemPrompt: string,
     userMessage: string
 ): Promise<string> => {
     try {
-        const content = await callMistral([
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage }
-        ]);
-        return content || "No response from AI.";
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: userMessage,
+            config: {
+                systemInstruction: systemPrompt,
+            }
+        });
+        return response.text || "No response from AI.";
     } catch (error) {
-        console.error("Mistral Chat Error:", error);
-        return "Error connecting to Mistral AI. Please check the console.";
+        console.error("Gemini Chat Error:", error);
+        return "Error connecting to AI. Please check the console.";
     }
 };
 
 /**
- * Generates a pixel art texture JSON using Mistral (Text-to-Pixel).
+ * Generates a pixel art texture JSON using Gemini.
  */
-export const generateTextureWithMistral = async (
+export const generateTextureWithGemini = async (
     prompt: string,
     resolution: number
 ): Promise<string[] | null> => {
     try {
-        const systemPrompt = `You are a pixel art generator. 
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Generate a pixel art texture of: ${prompt}.`,
+            config: {
+                systemInstruction: `You are a pixel art generator. 
         You must output a VALID JSON object with a single property 'pixels'.
         'pixels' must be an array of strings representing hex color codes (e.g., '#FF0000') or 'transparent'.
-        The array must have exactly ${resolution * resolution} elements, representing a ${resolution}x${resolution} grid row by row.
-        Do not include markdown formatting like \`\`\`json. Just the raw JSON object.`;
+        The array must have exactly ${resolution * resolution} elements, representing a ${resolution}x${resolution} grid row by row.`,
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        pixels: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING }
+                        }
+                    }
+                }
+            }
+        });
 
-        const userPrompt = `Generate a pixel art texture of: ${prompt}.`;
-
-        const content = await callMistral([
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-        ], true);
-
-        // Parse response
-        let jsonStr = content.trim();
-        // Remove markdown code blocks if present despite instructions
-        if (jsonStr.startsWith('```json')) jsonStr = jsonStr.replace(/^```json/, '').replace(/```$/, '');
-        if (jsonStr.startsWith('```')) jsonStr = jsonStr.replace(/^```/, '').replace(/```$/, '');
-
-        const json = JSON.parse(jsonStr);
-
+        const json = JSON.parse(response.text || '{}');
         if (json.pixels && Array.isArray(json.pixels)) {
             // Ensure size match
             if (json.pixels.length !== resolution * resolution) {
@@ -89,44 +66,56 @@ export const generateTextureWithMistral = async (
         }
         return null;
     } catch (error) {
-        console.error("Mistral Texture Error:", error);
+        console.error("Gemini Texture Error:", error);
         return null;
     }
 };
 
 /**
- * Generates layout commands for the Background Designer.
+ * Generates layout commands for the Background Designer using Gemini.
  */
-export const generateLayoutWithMistral = async (
+export const generateLayoutWithGemini = async (
     prompt: string
 ): Promise<any[] | null> => {
     try {
-        const systemPrompt = `You are a Minecraft GUI Layout generator. 
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Generate a layout for: "${prompt}".`,
+            config: {
+                systemInstruction: `You are a Minecraft GUI Layout generator. 
         Output a VALID JSON object with a property 'elements'.
         'elements' is an array of objects. Each object has:
         - type: "slot" or "text"
         - x: number (canvas width is 176)
         - y: number (canvas height is 166)
         - text: string (optional, only for type "text")
-        Standard slot size is 18x18.
-        Do not include markdown formatting.`;
+        Standard slot size is 18x18.`,
+                responseMimeType: 'application/json',
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        elements: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    type: { type: Type.STRING },
+                                    x: { type: Type.INTEGER },
+                                    y: { type: Type.INTEGER },
+                                    text: { type: Type.STRING, nullable: true }
+                                },
+                                required: ['type', 'x', 'y']
+                            }
+                        }
+                    }
+                }
+            }
+        });
 
-        const userPrompt = `Generate a layout for: "${prompt}".`;
-
-        const content = await callMistral([
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-        ], true);
-
-         // Parse response
-         let jsonStr = content.trim();
-         if (jsonStr.startsWith('```json')) jsonStr = jsonStr.replace(/^```json/, '').replace(/```$/, '');
-         if (jsonStr.startsWith('```')) jsonStr = jsonStr.replace(/^```/, '').replace(/```$/, '');
- 
-        const json = JSON.parse(jsonStr);
+        const json = JSON.parse(response.text || '{}');
         return json.elements || null;
     } catch (error) {
-        console.error("Mistral Layout Error:", error);
+        console.error("Gemini Layout Error:", error);
         return null;
     }
 };

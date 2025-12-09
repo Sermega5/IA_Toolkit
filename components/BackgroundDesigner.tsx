@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Download, Layout, Type, Layers, PenTool, Eraser, PaintBucket, Sparkles, ZoomIn, ZoomOut, Undo, RefreshCcw, WifiOff } from 'lucide-react';
-import { generateLayoutWithMistral } from '../services/geminiService';
+import { Download, Layout, Type, Layers, PenTool, Eraser, PaintBucket, Sparkles, ZoomIn, ZoomOut, Undo, RefreshCcw, Pipette, WifiOff } from 'lucide-react';
+import { generateLayoutWithGemini } from '../services/geminiService';
 
 interface Element {
     id: number;
@@ -350,12 +350,12 @@ const BackgroundDesigner: React.FC = () => {
         
         setIsProcessing(true);
         try {
-            const layout = await generateLayoutWithMistral(aiPrompt);
+            const layout = await generateLayoutWithGemini(aiPrompt);
             if (layout && Array.isArray(layout)) {
                 // Map AI layout to elements
-                const newElements = layout.map((item: any, i: number) => ({
+                const newElements: Element[] = layout.map((item: any, i: number) => ({
                     id: Date.now() + i,
-                    type: item.type === 'text' ? 'text' : 'slot',
+                    type: (item.type === 'text' ? 'text' : 'slot') as 'slot' | 'text',
                     x: item.x || 10,
                     y: item.y || 10,
                     w: item.type === 'slot' ? 18 : 50,
@@ -365,11 +365,11 @@ const BackgroundDesigner: React.FC = () => {
                 // Clear existing and add new
                 setElements(newElements);
             } else {
-                alert("Mistral no pudo generar un diseño válido.");
+                alert("La IA no pudo generar un diseño válido.");
             }
         } catch (e) {
             console.error(e);
-            alert("Error con Mistral AI");
+            alert("Error con la IA");
         } finally {
             setIsProcessing(false);
         }
@@ -530,7 +530,7 @@ const BackgroundDesigner: React.FC = () => {
                                 type="text" 
                                 value={aiPrompt}
                                 onChange={(e) => setAiPrompt(e.target.value)}
-                                placeholder={isOnline ? "Mistral: 'Crea un inventario de doble cofre', 'menu de misiones'..." : "Conecta a internet para usar la IA"}
+                                placeholder={isOnline ? "IA: 'Crea un inventario de doble cofre', 'menu de misiones'..." : "Conecta a internet para usar la IA"}
                                 disabled={!isOnline}
                                 className={`w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
                         />

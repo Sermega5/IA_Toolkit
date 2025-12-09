@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Send, Bot, Loader2, ExternalLink, WifiOff } from 'lucide-react';
-import { chatWithMistral } from '../services/geminiService';
+import { chatWithGemini } from '../services/geminiService';
 
 interface WikiAssistantProps {
     isOpen: boolean;
@@ -40,7 +40,7 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
         if (!isOnline) {
              setMessages(prev => [...prev, { role: 'user', text: inputValue }]);
              setTimeout(() => {
-                setMessages(prev => [...prev, { role: 'model', text: "Lo siento, necesito conexión a internet para usar Mistral AI." }]);
+                setMessages(prev => [...prev, { role: 'model', text: "Lo siento, necesito conexión a internet para usar la IA." }]);
                 setInputValue('');
              }, 500);
              return;
@@ -54,13 +54,13 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
         try {
             const systemPrompt = "Eres un experto en el plugin ItemsAdder para Minecraft. Tu objetivo es ayudar a los usuarios a configurar items, crear texturas y entender la configuración YAML. Responde siempre en Español y sé conciso y técnico cuando sea necesario.";
             
-            const responseText = await chatWithMistral(systemPrompt, userMsg);
+            const responseText = await chatWithGemini(systemPrompt, userMsg);
             
             setMessages(prev => [...prev, { role: 'model', text: responseText }]);
 
         } catch (error) {
             console.error(error);
-            setMessages(prev => [...prev, { role: 'model', text: "Hubo un error al conectar con Mistral AI." }]);
+            setMessages(prev => [...prev, { role: 'model', text: "Hubo un error al conectar con la IA." }]);
         } finally {
             setIsLoading(false);
         }
@@ -78,7 +78,7 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
                         </div>
                         <div>
                             <h3 className="font-bold text-white text-lg">Asistente ItemsAdder</h3>
-                            <p className="text-xs text-blue-200">Powered by Mistral AI</p>
+                            <p className="text-xs text-blue-200">Powered by Toolkit AI</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="text-white/70 hover:text-white transition-colors bg-white/10 hover:bg-white/20 p-2 rounded-full">
@@ -125,7 +125,7 @@ const WikiAssistant: React.FC<WikiAssistantProps> = ({ isOpen, onClose }) => {
                     {isLoading && (
                         <div className="flex items-center gap-3 text-gray-500 text-sm pl-2">
                             <Loader2 size={16} className="animate-spin text-blue-500" /> 
-                            <span className="animate-pulse">Mistral está escribiendo...</span>
+                            <span className="animate-pulse">Toolkit AI está escribiendo...</span>
                         </div>
                     )}
                     <div ref={messagesEndRef} />
