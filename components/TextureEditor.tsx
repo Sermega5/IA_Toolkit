@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, Sparkles, Download, Eraser, PaintBucket, PenTool, ZoomIn, ZoomOut, Undo, RefreshCcw } from 'lucide-react';
+import { Upload, Sparkles, Download, Eraser, PaintBucket, PenTool, ZoomIn, ZoomOut, Undo, RefreshCcw, Pipette } from 'lucide-react';
 import { editTextureWithAi } from '../services/geminiService';
 
 const RESOLUTIONS = [16, 32, 64];
@@ -18,6 +18,9 @@ const TextureEditor: React.FC = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Zoom state
+  const [zoom, setZoom] = useState(32);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -27,6 +30,9 @@ const TextureEditor: React.FC = () => {
     setPixels(newPixels);
     setHistory([newPixels]);
     setHistoryIndex(0);
+    
+    // Set default zoom to fit roughly 512px
+    setZoom(Math.floor(512 / resolution));
   }, [resolution]);
 
   // Draw pixels to canvas
@@ -254,7 +260,7 @@ const TextureEditor: React.FC = () => {
                     { id: 'pencil', icon: PenTool },
                     { id: 'eraser', icon: Eraser },
                     { id: 'bucket', icon: PaintBucket },
-                    { id: 'picker', icon: ZoomIn }, // Using ZoomIn icon for picker approx
+                    { id: 'picker', icon: Pipette },
                 ].map(t => (
                     <button 
                         key={t.id}
@@ -330,12 +336,20 @@ const TextureEditor: React.FC = () => {
       </div>
 
       {/* Main Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col relative overflow-hidden">
+          
+          {/* Zoom Controls Overlay */}
+          <div className="absolute top-4 right-4 flex gap-2 bg-gray-800 p-1 rounded shadow-lg z-20 border border-gray-700">
+             <button onClick={() => setZoom(z => Math.max(1, z - 2))} className="p-2 hover:bg-gray-700 rounded text-gray-300"><ZoomOut size={16}/></button>
+             <span className="p-2 text-xs font-mono text-gray-400 w-12 text-center flex items-center justify-center">{zoom}x</span>
+             <button onClick={() => setZoom(z => Math.min(64, z + 2))} className="p-2 hover:bg-gray-700 rounded text-gray-300"><ZoomIn size={16}/></button>
+          </div>
+
           {/* Canvas Viewport */}
-          <div className="flex-1 bg-[#1a1a1a] flex items-center justify-center p-8 overflow-hidden relative"
+          <div className="flex-1 overflow-auto bg-[#1a1a1a] flex p-8 relative"
                style={{ backgroundImage: 'radial-gradient(#2a2a2a 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
               
-              <div className="bg-white shadow-2xl border-2 border-gray-600 image-pixelated">
+              <div className="m-auto bg-white shadow-2xl border-2 border-gray-600 image-pixelated flex-shrink-0">
                   <canvas 
                     ref={canvasRef}
                     width={resolution}
@@ -345,13 +359,13 @@ const TextureEditor: React.FC = () => {
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseUp}
                     className="cursor-crosshair image-pixelated block"
-                    style={{ width: '512px', height: '512px' }}
+                    style={{ width: resolution * zoom, height: resolution * zoom }}
                   />
               </div>
           </div>
 
           {/* AI Bar */}
-          <div className="h-20 bg-gray-900 border-t border-gray-800 p-4 flex items-center gap-4">
+          <div className="h-20 bg-gray-900 border-t border-gray-800 p-4 flex items-center gap-4 z-20">
                <div className="bg-purple-900/20 p-2 rounded-lg">
                    <Sparkles className="text-purple-400" />
                </div>

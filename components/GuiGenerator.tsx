@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { Grid, Trash2, Package, Upload, Image as ImageIcon, X } from 'lucide-react';
+import { Grid, Trash2, Package } from 'lucide-react';
 import { GuiSlot } from '../types';
 
 const GuiGenerator: React.FC = () => {
     const [guiName, setGuiName] = useState('menu_principal');
     const [title, setTitle] = useState('&8Menú del Servidor');
     const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
-    const [customBg, setCustomBg] = useState<string | null>(null);
     
     // Initialize 6 rows of 9 slots (54 total for double chest)
     const [slots, setSlots] = useState<GuiSlot[]>([]);
@@ -48,148 +47,95 @@ guis:
         return yaml;
     };
 
-    const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                setCustomBg(ev.target?.result as string);
-            };
-            reader.readAsDataURL(file);
-        }
+    const getTextureUrl = (itemName: string) => {
+        if (!itemName) return null;
+        // Strip namespace if present
+        const cleanName = itemName.includes(':') ? itemName.split(':')[1] : itemName;
+        // Normalize for texture packs (lowercase, etc)
+        return cleanName.toLowerCase().replace(/ /g, '_');
     };
 
     return (
         <div className="flex h-full bg-gray-950 p-6 overflow-hidden">
-            <div className="flex flex-col w-2/3 pr-6 h-full">
-                <div className="mb-4 flex justify-between items-end">
+            <div className="flex flex-col w-2/3 pr-6">
+                <div className="mb-6 flex justify-between items-end">
                     <div>
-                        <h2 className="text-2xl font-bold text-white mb-1 flex items-center gap-2">
+                        <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
                              <Grid className="text-orange-500" /> Diseñador de GUI (Config)
                         </h2>
-                        <p className="text-gray-400 text-sm">Configura la lógica del menú. Sube un fondo para alinear los slots.</p>
+                        <p className="text-gray-400 text-sm">Configura la lógica del menú y previsualiza items.</p>
                     </div>
                 </div>
 
-                {/* Preview Area */}
-                <div className="flex-1 bg-gray-900 rounded-lg border border-gray-800 p-8 flex items-center justify-center overflow-auto relative">
-                    {/* The Container for the GUI */}
-                    <div className="relative inline-block shadow-2xl">
-                        {/* Custom Background Layer */}
-                        {customBg ? (
-                            <img 
-                                src={customBg} 
-                                alt="Custom Background" 
-                                className="absolute top-0 left-0 w-full h-full object-contain z-0 image-pixelated opacity-80"
-                            />
-                        ) : (
-                            // Default grey background if no custom BG is uploaded
-                            <div className="absolute inset-0 bg-[#c6c6c6] border-4 border-[#555555] rounded-lg z-0"></div>
-                        )}
+                <div className="bg-[#c6c6c6] p-4 rounded-lg shadow-xl border-4 border-[#555555] inline-block self-center relative">
+                    <div className="text-[#404040] font-bold mb-2 font-pixel px-2 text-lg drop-shadow-sm">{title.replace(/&[0-9a-f]/g, '')}</div>
+                    <div className="grid grid-cols-9 gap-1 bg-[#c6c6c6]">
+                        {Array.from({ length: 54 }).map((_, i) => {
+                            const slotData = getSlotData(i);
+                            const isSelected = selectedSlot === i;
+                            const textureName = slotData?.item ? getTextureUrl(slotData.item) : null;
+                            
+                            // URLs to try in order (handled by error fallback)
+                            // 1. Item texture
+                            const itemUrl = textureName ? `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.19.3/assets/minecraft/textures/item/${textureName}.png` : '';
+                            // 2. Block texture (if item fails)
+                            const blockUrl = textureName ? `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.19.3/assets/minecraft/textures/block/${textureName}.png` : '';
 
-                        {/* Title Overlay (only if default BG is used mostly, but kept for reference) */}
-                        {!customBg && (
-                            <div className="absolute top-2 left-2 text-[#404040] font-bold font-pixel z-10 text-lg drop-shadow-sm">
-                                {title.replace(/&[0-9a-f]/g, '')}
-                            </div>
-                        )}
-
-                        {/* Grid Layer */}
-                        <div className={`grid grid-cols-9 gap-[2px] p-2 relative z-10 ${customBg ? 'mt-0' : 'mt-6'}`} style={{ width: 'fit-content' }}>
-                            {Array.from({ length: 54 }).map((_, i) => {
-                                const slotData = getSlotData(i);
-                                const isSelected = selectedSlot === i;
-                                
-                                // Clean item name for API
-                                let rawItem = slotData?.item || '';
-                                // Remove namespace if present
-                                if (rawItem.includes(':')) rawItem = rawItem.split(':')[1];
-                                
-                                // Mineatar API is great for blocks/items rendered 3D
-                                const iconUrl = rawItem ? `https://api.mineatar.io/item/${rawItem}` : '';
-
-                                return (
-                                    <div 
-                                        key={i}
-                                        onClick={() => setSelectedSlot(i)}
-                                        className={`
-                                            w-9 h-9 
-                                            ${customBg ? 'border border-white/20 bg-white/5 hover:bg-white/10' : 'border-2 border-[#373737] border-r-white border-b-white bg-[#8b8b8b] hover:bg-[#9b9b9b]'}
-                                            ${isSelected ? 'ring-2 ring-red-500 z-50' : ''}
-                                            cursor-pointer relative
-                                            flex items-center justify-center group transition-colors
-                                        `}
-                                    >
-                                        {/* Slot Inner Shadow (only for default style) */}
-                                        {!customBg && (
-                                            <div className="absolute inset-0 border-t-[#373737] border-l-[#373737] border-2 pointer-events-none opacity-40"></div>
-                                        )}
-                                        
-                                        {slotData?.item && (
-                                            <div className="w-7 h-7 z-20 relative flex items-center justify-center">
-                                                <img 
-                                                    src={iconUrl} 
-                                                    alt={rawItem}
-                                                    className="w-full h-full object-contain image-pixelated drop-shadow-md"
-                                                    onError={(e) => {
-                                                        e.currentTarget.style.display = 'none';
-                                                        e.currentTarget.parentElement?.querySelector('.fallback-text')?.classList.remove('hidden');
-                                                    }}
-                                                />
-                                                <span className="fallback-text hidden text-[6px] text-red-500 font-bold break-all leading-none text-center">
-                                                    {rawItem.substring(0, 8)}
-                                                </span>
+                            return (
+                                <div 
+                                    key={i}
+                                    onClick={() => setSelectedSlot(i)}
+                                    className={`
+                                        w-10 h-10 border-2 
+                                        ${isSelected ? 'border-red-500 z-10' : 'border-[#373737] border-r-white border-b-white'} 
+                                        bg-[#8b8b8b] hover:bg-[#9b9b9b] cursor-pointer relative
+                                        flex items-center justify-center group transition-colors
+                                    `}
+                                >
+                                    {/* Slot Inner Shadow */}
+                                    <div className="absolute inset-0 border-t-[#373737] border-l-[#373737] border-2 pointer-events-none opacity-40"></div>
+                                    
+                                    {slotData?.item && (
+                                        <div className="w-8 h-8 z-0 relative flex items-center justify-center">
+                                            <img 
+                                                src={itemUrl} 
+                                                alt=""
+                                                className="w-full h-full object-contain image-pixelated"
+                                                onError={(e) => {
+                                                    const img = e.currentTarget;
+                                                    // Try fallback to block texture
+                                                    if (blockUrl && img.src !== blockUrl) {
+                                                        img.src = blockUrl;
+                                                    } else {
+                                                        // Fallback failed, hide image and show text placeholder
+                                                        img.style.display = 'none';
+                                                        img.parentElement!.classList.add('text-placeholder');
+                                                    }
+                                                }}
+                                            />
+                                            {/* Text placeholder shown via CSS if image is hidden */}
+                                            <div className="hidden text-placeholder absolute inset-0 items-center justify-center text-[8px] font-bold text-gray-700/50">
+                                                ?
                                             </div>
-                                        )}
-                                        
-                                        {/* Hover Number */}
-                                        <span className="text-[8px] text-white absolute top-0 left-0 font-mono opacity-0 group-hover:opacity-100 bg-black/70 px-1 rounded pointer-events-none z-30">{i}</span>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                        </div>
+                                    )}
+                                    <span className="text-[8px] text-gray-600 absolute top-0.5 left-0.5 font-mono opacity-0 group-hover:opacity-100 bg-white/50 px-0.5 rounded pointer-events-none">{i}</span>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
                 
-                {/* YAML Output */}
-                <div className="mt-4 h-32 bg-gray-900 p-4 rounded border border-gray-800 font-mono text-xs text-green-400 overflow-auto custom-scrollbar whitespace-pre shadow-inner">
+                <div className="mt-8 bg-gray-900 p-4 rounded border border-gray-800 font-mono text-xs text-green-400 overflow-auto flex-1 custom-scrollbar whitespace-pre shadow-inner">
                     {generateYaml()}
                 </div>
             </div>
 
-            {/* Sidebar Controls */}
-            <div className="w-1/3 bg-gray-900 border-l border-gray-800 p-6 flex flex-col h-full shadow-lg z-20 overflow-y-auto custom-scrollbar">
+            <div className="w-1/3 bg-gray-900 border-l border-gray-800 p-6 flex flex-col h-full shadow-lg z-10">
                  <div className="space-y-4 mb-8">
                      <h3 className="font-bold text-gray-300 border-b border-gray-700 pb-2 flex items-center gap-2">
                          <Package size={16}/> Configuración General
                      </h3>
-                     
-                     {/* Background Upload */}
-                     <div className="bg-gray-800 p-3 rounded-lg border border-gray-700">
-                         <label className="block text-xs uppercase text-blue-400 font-bold mb-2 flex items-center gap-2">
-                             <ImageIcon size={12} /> Fondo de Referencia
-                         </label>
-                         <div className="flex gap-2">
-                             <label className="flex-1 cursor-pointer bg-gray-700 hover:bg-gray-600 text-white text-xs py-2 px-3 rounded flex items-center justify-center gap-2 transition-colors">
-                                 <Upload size={14} />
-                                 {customBg ? 'Cambiar Imagen' : 'Subir Imagen (PNG)'}
-                                 <input type="file" className="hidden" accept="image/png,image/jpeg" onChange={handleBgUpload} />
-                             </label>
-                             {customBg && (
-                                 <button 
-                                    onClick={() => setCustomBg(null)}
-                                    className="bg-red-900/50 hover:bg-red-900 text-red-200 p-2 rounded"
-                                    title="Quitar fondo"
-                                 >
-                                     <X size={14} />
-                                 </button>
-                             )}
-                         </div>
-                         <p className="text-[10px] text-gray-500 mt-2">
-                             Sube el diseño que hiciste en el "Diseñador de Fondo" para alinear los slots perfectamente.
-                         </p>
-                     </div>
-
                      <div>
                         <label className="block text-xs uppercase text-gray-500 font-bold mb-1">ID del Menú</label>
                         <input 
@@ -218,14 +164,14 @@ guis:
                  {selectedSlot !== null ? (
                      <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
                          <div>
-                            <label className="block text-xs uppercase text-gray-500 font-bold mb-1">Material / Item ID</label>
+                            <label className="block text-xs uppercase text-gray-500 font-bold mb-1">ItemsAdder Item ID</label>
                             <input 
-                                placeholder="ej: diamond_sword"
+                                placeholder="minecraft:diamond_sword"
                                 value={getSlotData(selectedSlot)?.item || ''}
                                 onChange={(e) => updateSlot(selectedSlot, { item: e.target.value })}
                                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm font-mono focus:border-blue-500 outline-none"
                             />
-                            <p className="text-[10px] text-gray-500 mt-1">Soporta items vanilla (stone, grass_block) y custom.</p>
+                            <p className="text-[10px] text-gray-500 mt-1">Usa nombres estándar (minecraft:stone) para ver la preview.</p>
                          </div>
                          <div>
                             <label className="block text-xs uppercase text-gray-500 font-bold mb-1">Comando / Acción</label>
@@ -253,6 +199,11 @@ guis:
                      </div>
                  )}
             </div>
+            <style>{`
+                .text-placeholder.text-placeholder {
+                    display: flex !important;
+                }
+            `}</style>
         </div>
     );
 };

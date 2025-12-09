@@ -377,7 +377,7 @@ const BackgroundDesigner: React.FC = () => {
     return (
         <div className="flex h-full bg-gray-950 p-6 overflow-hidden">
             {/* Toolbar */}
-            <div className="w-64 border-r border-gray-800 pr-4 flex flex-col gap-6 custom-scrollbar overflow-y-auto shrink-0 z-20">
+            <div className="w-64 border-r border-gray-800 pr-4 flex flex-col gap-6 custom-scrollbar overflow-y-auto">
                 <div>
                     <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
                         <Layout className="text-pink-500" /> Designer BG
@@ -531,45 +531,41 @@ const BackgroundDesigner: React.FC = () => {
                 </div>
             </div>
 
-            {/* Main Content Area */}
-            <div className="flex-1 flex flex-col bg-[#1a1a1a] relative overflow-hidden">
-                {/* Top Bar for Zoom & Download - Always Visible */}
-                <div className="h-14 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-6 shrink-0 z-30 shadow-md">
-                    <div className="text-gray-400 text-xs font-mono">176x166 (GUI Estándar)</div>
-                    <div className="flex items-center gap-4">
-                        <div className="flex gap-1 bg-gray-800 p-1 rounded border border-gray-700">
-                            <button onClick={() => setZoom(Math.max(1, zoom - 0.5))} className="p-1.5 hover:bg-gray-700 rounded text-gray-300"><ZoomOut size={16}/></button>
-                            <span className="p-1.5 text-xs font-mono text-gray-400 w-12 text-center border-l border-r border-gray-700">{zoom}x</span>
-                            <button onClick={() => setZoom(Math.min(10, zoom + 0.5))} className="p-1.5 hover:bg-gray-700 rounded text-gray-300"><ZoomIn size={16}/></button>
-                        </div>
-                        <button 
-                            onClick={handleDownload} 
-                            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded shadow text-xs font-bold flex items-center gap-2"
-                        >
-                            <Download size={14} /> Descargar (4x)
-                        </button>
-                    </div>
+            {/* Canvas Area */}
+            <div className="flex-1 flex flex-col items-center justify-center bg-[#1a1a1a] relative"
+                 style={{ backgroundImage: 'radial-gradient(#2a2a2a 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
+                
+                {/* Zoom Controls */}
+                <div className="absolute top-4 right-4 flex gap-2 bg-gray-800 p-1 rounded shadow-lg">
+                    <button onClick={() => setZoom(Math.max(1, zoom - 0.5))} className="p-2 hover:bg-gray-700 rounded text-gray-300"><ZoomOut size={16}/></button>
+                    <span className="p-2 text-xs font-mono text-gray-400 w-12 text-center">{zoom}x</span>
+                    <button onClick={() => setZoom(Math.min(10, zoom + 0.5))} className="p-2 hover:bg-gray-700 rounded text-gray-300"><ZoomIn size={16}/></button>
                 </div>
 
-                {/* Canvas Scroll Area */}
-                <div className="flex-1 overflow-auto flex items-center justify-center p-8 bg-[#1a1a1a] relative" 
-                     style={{ backgroundImage: 'radial-gradient(#2a2a2a 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
-                    <div className="bg-[#121212] p-8 rounded shadow-2xl relative inline-block">
-                        <canvas 
-                            ref={canvasRef}
-                            width={CANVAS_W} 
-                            height={CANVAS_H}
-                            className={`image-pixelated shadow-lg ${tool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
-                            style={{ 
-                                width: CANVAS_W * zoom, 
-                                height: CANVAS_H * zoom 
-                            }}
-                            onMouseDown={handleCanvasMouseDown}
-                            onMouseMove={handleCanvasMouseMove}
-                            onMouseUp={handleCanvasMouseUp}
-                            onMouseLeave={handleCanvasMouseUp}
-                        />
-                    </div>
+                <div className="bg-[#121212] p-8 rounded shadow-2xl relative overflow-auto max-w-full max-h-full">
+                    <div className="absolute top-2 left-2 text-gray-500 text-xs font-mono">176x166 (GUI Estándar)</div>
+                    <canvas 
+                        ref={canvasRef}
+                        width={CANVAS_W} 
+                        height={CANVAS_H}
+                        className={`image-pixelated shadow-lg ${tool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
+                        style={{ 
+                            width: CANVAS_W * zoom, 
+                            height: CANVAS_H * zoom 
+                        }}
+                        onMouseDown={handleCanvasMouseDown}
+                        onMouseMove={handleCanvasMouseMove}
+                        onMouseUp={handleCanvasMouseUp}
+                        onMouseLeave={handleCanvasMouseUp}
+                    />
+                </div>
+                <div className="mt-8">
+                    <button 
+                        onClick={handleDownload} 
+                        className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded shadow-lg flex items-center gap-2"
+                    >
+                        <Download size={18} /> Descargar PNG (4x Upscaled)
+                    </button>
                 </div>
             </div>
         </div>
